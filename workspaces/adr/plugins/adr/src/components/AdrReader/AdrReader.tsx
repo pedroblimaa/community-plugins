@@ -16,6 +16,7 @@
 
 import { useMemo } from 'react';
 import {
+  CodeSnippet,
   InfoCard,
   MarkdownContent,
   Progress,
@@ -30,7 +31,33 @@ import { CookieAuthRefreshProvider } from '@backstage/plugin-auth-react';
 import { adrDecoratorFactories } from './decorators';
 import { AdrContentDecorator } from './types';
 import { adrApiRef } from '../../api';
+import { MermaidDiagram } from './MermaidDiagram';
 import useAsync from 'react-use/esm/useAsync';
+
+/**
+ * Renders mermaid code blocks as diagrams, other languages via CodeSnippet.
+ */
+const codeComponents = {
+  code({ inline, className, children, ...props }: any) {
+    const text = String(children).replace(/\n+$/, '');
+    const match = /language-(\w+)/.exec(className || '');
+    const language = match?.[1];
+
+    if (!inline && language === 'mermaid') {
+      return <MermaidDiagram chart={text} />;
+    }
+
+    if (!inline && language) {
+      return <CodeSnippet language={language} text={text} />;
+    }
+
+    return (
+      <code className={className} {...props}>
+        {children}
+      </code>
+    );
+  },
+};
 
 /**
  * Component to fetch and render an ADR.
@@ -40,8 +67,9 @@ import useAsync from 'react-use/esm/useAsync';
 export const AdrReader = (props: {
   adr: string;
   decorators?: AdrContentDecorator[];
+  components?: Record<string, React.ComponentType<any>>;
 }) => {
-  const { adr, decorators } = props;
+  const { adr, decorators, components } = props;
   const { entity } = useEntity();
   const scmIntegrations = useApi(scmIntegrationsApiRef);
   const adrApi = useApi(adrApiRef);
@@ -59,6 +87,7 @@ export const AdrReader = (props: {
     loading: backendUrlLoading,
     error: backendUrlError,
   } = useAsync(async () => discoveryApi.getBaseUrl('adr'), []);
+
   const adrContent = useMemo(() => {
     if (!value?.data) {
       return '';
@@ -75,6 +104,8 @@ export const AdrReader = (props: {
       value.data,
     );
   }, [adrLocationUrl, decorators, value, adr]);
+
+  const markdownComponents = { ...codeComponents, ...components };
 
   return (
     <CookieAuthRefreshProvider pluginId="adr">
@@ -100,9 +131,10 @@ export const AdrReader = (props: {
             <MarkdownContent
               content={adrContent}
               linkTarget="_blank"
-              transformImageUri={href => {
+              transformImageUri={(href: string) => {
                 return `${backendUrl}/image?url=${href}`;
               }}
+              components={markdownComponents}
             />
           )}
       </InfoCard>
